@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -6,171 +6,141 @@ import {
   Navigate,
   Link,
 } from "react-router-dom";
+
+// Components
 import StudyPosts from "./components/StudyPosts";
 import ChatRoom from "./components/ChatRoom";
 import Login from "./components/Login";
 import Signup from "./components/SignUp";
 import Sidebar from "./components/SideBar";
 import Profile from "./components/Profile";
+
+// Auth Context
+import { useAuth, AuthProvider } from "./context/AuthContext.jsx";
+
+// Styles
 import "./App.css";
 
-function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    const token = localStorage.getItem("access_token");
-    const loggedIn = localStorage.getItem("is_logged_in");
-    return !!token && loggedIn === "true";
-  });
+/**
+ * A clean ProtectedRoute using the global Auth state
+ */
+const ProtectedRoute = ({ children }) => {
+  const { isLoggedIn, loading } = useAuth();
 
-  const [username, setUsername] = useState("");
+  if (loading)
+    return <div className="loading-screen">Loading Study Mitra...</div>;
+  return isLoggedIn ? children : <Navigate to="/login" replace />;
+};
 
-  useEffect(() => {
-    const syncAuthState = () => {
-      const token = localStorage.getItem("access_token");
-      const loggedIn = localStorage.getItem("is_logged_in");
-      const userData = localStorage.getItem("user");
-
-      setIsAuthenticated(!!token && loggedIn === "true");
-
-      if (userData) {
-        try {
-          const parsed = JSON.parse(userData);
-          // Adjust based on your API's response structure
-          setUsername(parsed.username || parsed.name || "User");
-        } catch {
-          setUsername(userData);
-        }
-      }
-    };
-
-    syncAuthState();
-    window.addEventListener("storage", syncAuthState);
-    return () => window.removeEventListener("storage", syncAuthState);
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.clear();
-    setIsAuthenticated(false);
-    setUsername("");
-  };
+function AppContent() {
+  // Pull reactive state directly from Context
+  const { user, isLoggedIn, logout } = useAuth();
 
   return (
     <Router>
       <div className="App">
-        {/* NAVBAR */}
-        {isAuthenticated && (
-          <nav className="app-navbar">
+        {/* NAVBAR - Automatically reacts when isLoggedIn changes */}
+        {isLoggedIn && (
+          <header className="app-navbar">
             <div className="nav-left">
-              <Link to="/" style={{ textDecoration: "none" }}>
+              <Link to="/" className="logo-link">
                 <span className="logo">Study Mitra</span>
               </Link>
             </div>
 
             <div className="nav-center">
               <span className="welcome-text">
-                Welcome, <span className="user-highlight">{username}</span>
+                Welcome,{" "}
+                <span className="user-highlight">
+                  {user?.username || "Scholar"}
+                </span>
               </span>
             </div>
 
             <div className="nav-right">
-              <button className="logout-button" onClick={handleLogout}>
+              <button
+                className="logout-button"
+                onClick={logout}
+                title="Sign Out"
+              >
                 Logout
               </button>
             </div>
-          </nav>
+          </header>
         )}
 
-        <div className="main-layout">
-          {isAuthenticated && <Sidebar />}
+        <div className={`main-layout ${!isLoggedIn ? "auth-mode" : ""}`}>
+          {/* SIDEBAR - Automatically visible on login */}
+          {isLoggedIn && <Sidebar />}
 
           <main className="content-area">
             <Routes>
-              {/* Public Routes */}
+              {/* --- PUBLIC ROUTES --- */}
               <Route
                 path="/login"
-                element={
-                  !isAuthenticated ? (
-                    <Login onLoginSuccess={() => setIsAuthenticated(true)} />
-                  ) : (
-                    <Navigate to="/" replace />
-                  )
-                }
+                element={!isLoggedIn ? <Login /> : <Navigate to="/" replace />}
               />
               <Route
                 path="/signup"
-                element={
-                  !isAuthenticated ? <Signup /> : <Navigate to="/" replace />
-                }
+                element={!isLoggedIn ? <Signup /> : <Navigate to="/" replace />}
               />
 
-              {/* Protected Routes - These must match the 'to' props in Sidebar.jsx */}
+              {/* --- PROTECTED ROUTES --- */}
               <Route
                 path="/"
                 element={
-                  isAuthenticated ? (
+                  <ProtectedRoute>
                     <StudyPosts />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
+                  </ProtectedRoute>
                 }
               />
 
               <Route
                 path="/profile"
                 element={
-                  isAuthenticated ? (
-                    <Profile username={username} />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
+                  <ProtectedRoute>
+                    <Profile username={user?.username} />
+                  </ProtectedRoute>
                 }
               />
 
               <Route
                 path="/exams"
                 element={
-                  isAuthenticated ? (
-                    <div style={{ padding: "2rem" }}>
+                  <ProtectedRoute>
+                    <section className="placeholder-view">
                       <h2>Exam Preparation</h2>
-                      <p>Practice tests and materials.</p>
-                    </div>
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
-                }
-              />
-
-              <Route
-                path="/challenges"
-                element={
-                  isAuthenticated ? (
-                    <div style={{ padding: "2rem" }}>
-                      <h2>Micro Challenges</h2>
-                      <p>Daily tasks to boost your skills.</p>
-                    </div>
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
+                      <p>Practice tests and materials are coming soon.</p>
+                    </section>
+                  </ProtectedRoute>
                 }
               />
 
               <Route
                 path="/chat/:sessionId"
                 element={
-                  isAuthenticated ? (
+                  <ProtectedRoute>
                     <ChatRoom />
-                  ) : (
-                    <Navigate to="/login" replace />
-                  )
+                  </ProtectedRoute>
                 }
               />
 
-              {/* Catch-all Fallback */}
+              {/* --- FALLBACK --- */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
         </div>
       </div>
     </Router>
+  );
+}
+
+// Wrap the app in the AuthProvider
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

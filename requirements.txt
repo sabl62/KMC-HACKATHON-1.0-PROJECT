@@ -1,25 +1,19 @@
-# AI & OCR Integration
-google-cloud-vision==3.4.5    # For the advanced OCR text extraction
-groq==1.3.0                   # If using GPT for Bio/Skill analysis
-python-multipart==0.0.6       # For handling file uploads
 
-# Image/Media Management
-cloudinary==1.36.0            # Backend SDK to sync with your Cloudinary setup
+# --- AI & OCR Integration ---
+google-cloud-vision==3.4.5    # Advanced OCR text extraction
+groq==0.4.2                   # Inference for Bio/Skill analysis (Updated to latest stable)
+langchain==0.1.0              # Recommended: Helps manage AI prompt templates
 
-# Environment & Utilities
-python-dotenv==1.0.0
-pydantic==2.5.2
-requests==2.31.0
-```// filepath: d:\Study Mitra\requirements.txt
-# AI & OCR Integration
-google-cloud-vision==3.4.5    # For the advanced OCR text extraction
-groq==1.3.0                   # If using GPT for Bio/Skill analysis
-python-multipart==0.0.6       # For handling file uploads
+# --- Image/Media Management ---
+cloudinary==1.36.0            # Cloudinary SDK for image hosting
 
-# Image/Media Management
-cloudinary==1.36.0            # Backend SDK to sync with your Cloudinary setup
+# --- Database & Schema Validation ---
+pydantic[email]==2.5.2        # Data validation and settings management
+pydantic-settings==2.1.0      # Specifically for env file management
+SQLAlchemy==2.0.23            # Database ORM (if using PostgreSQL/MySQL)
 
-# Environment & Utilities
-python-dotenv==1.0.0
-pydantic==2.5.2
-requests==2.31.0
+# --- Environment & Utilities ---
+python-dotenv==1.0.0          # Load .env variables
+requests==2.31.0              # External API calls
+python-jose[cryptography]==3.3.0 # JWT Token generation for auth
+passlib[bcrypt]==1.7.4        # Password hashing

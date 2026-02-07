@@ -1,5 +1,6 @@
 import json
 import uuid
+import threading
 from groq import Groq
 from django.conf import settings
 from django.db import models as django_models
@@ -18,19 +19,75 @@ from .serializers import (
     ConversationNoteSerializer, UserProfileSerializer, 
     RegisterSerializer, UserSerializer, UserMediaSerializer
 )
-from .tasks import analyze_conversation_task
 
 client = Groq(api_key=settings.GROQ_API_KEY)
 
+# --- THE BACKGROUND WORKER FUNCTION (REPLACES TASKS.PY) ---
+def analyze_conversation_thread(session_id, messages):
+    try:
+        session = StudySession.objects.get(id=session_id)
+        
+        # Format conversation exactly like tasks.py
+        conversation_text = "\n".join([
+            f"{msg.get('userName', 'User')}: {msg.get('text', '')}"
+            for msg in messages
+        ])
+
+        prompt = f"""Analyze this study conversation and extract key learning points.
+        
+        Conversation:
+        {conversation_text}
+
+        Return exactly a JSON object with:
+        1. key_concepts (list)
+        2. definitions (list of {{'term': '...', 'definition': '...'}})
+        3. study_tips (list)
+        4. resources (list)
+        5. summary (string)
+        """
+
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile", 
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant that outputs only valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.5,
+            max_tokens=2048,
+        )
+        
+        analysis = json.loads(completion.choices[0].message.content)
+
+        # Create the note using all fields from the original tasks.py
+        ConversationNote.objects.create(
+            session=session,
+            content=analysis.get('summary', 'No summary provided'),
+            key_concepts=analysis.get('key_concepts', []),
+            definitions=analysis.get('definitions', []),
+            study_tips=analysis.get('study_tips', []),
+            resources_mentioned=analysis.get('resources', []), # Assumed field name
+            message_count_analyzed=len(messages)
+        )
+        
+        # Update session metadata
+        session.last_ai_analysis = timezone.now()
+        session.save()
+        print(f"✅ Success: Note generated for Session {session_id}")
+        
+    except Exception as e:
+        print(f"❌ Threading AI Error: {str(e)}")
+
+
+# --- VIEWS ---
+
 class RegisterView(APIView):
     permission_classes = []
-
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
             UserProfile.objects.get_or_create(user=user)
-            
             refresh = RefreshToken.for_user(user)
             return Response({
                 "access": str(refresh.access_token),
@@ -38,90 +95,56 @@ class RegisterView(APIView):
                 "user": UserSerializer(user).data
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class UserProfileViewSet(viewsets.ModelViewSet):
     queryset = UserProfile.objects.all()
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return self.queryset.filter(user=self.request.user)
+    def get_queryset(self): return self.queryset.filter(user=self.request.user)
 
     @action(detail=False, methods=['get', 'post'])
     def me(self, request):
-        profile, created = UserProfile.objects.get_or_create(user=request.user)
-        
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
         if request.method == 'POST':
             serializer = self.get_serializer(profile, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        serializer = self.get_serializer(profile)
-        return Response(serializer.data)
+        return Response(self.get_serializer(profile).data)
 
     @action(detail=False, methods=['post'])
     def upload_media(self, request):
         file_url = request.data.get('fileUrl') or request.data.get('file_url')
         category = request.data.get('category')
-      
         raw_text = request.data.get('aiAnalysisText', '').strip()
 
-        if not file_url:
-            return Response({"error": "No URL provided"}, status=400)
+        if not file_url: return Response({"error": "No URL provided"}, status=400)
 
-    
         media_obj = UserMedia.objects.create(
-            user=request.user,
-            file_url=file_url,
-            category=category,
+            user=request.user, file_url=file_url, category=category,
             title="Processing..." if category == 'certificate' else "New Note"
         )
 
-   
         if category == 'certificate' and raw_text:
             try:
-         
-                prompt = (
-                    f"Analyze this OCR text from a certificate: '{raw_text}'. "
-                    "Return ONLY a JSON object with keys: 'title', 'issuer', 'skills' (list). "
-                    "If a value is unknown, use 'Not found'."
-                )
-                
                 completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[
                         {"role": "system", "content": "You are a helpful assistant that outputs only JSON."},
-                        {"role": "user", "content": prompt}
+                        {"role": "user", "content": f"Analyze: '{raw_text}'. Return JSON with 'title', 'issuer', 'skills' (list)."}
                     ],
                     response_format={"type": "json_object"}
                 )
-                
                 ai_data = json.loads(completion.choices[0].message.content)
-                
-  
-                media_obj.title = ai_data.get('title') or "Certificate"
+                media_obj.title = ai_data.get('title') or "Verified Certificate"
                 media_obj.issuer = ai_data.get('issuer') or "Verified Issuer"
                 media_obj.skills = ai_data.get('skills') or []
-
-                if media_obj.title == "Processing...":
-                    media_obj.title = "Verified Certificate"
-
                 media_obj.save()
-                print(f"AI Successfully processed: {media_obj.title}")
-
-            except Exception as e:
-                print(f"AI Error: {str(e)}")
-                media_obj.title = "Certificate (AI Analysis Failed)"
-                media_obj.save()
+            except:
+                media_obj.title = "Certificate (AI Error)"; media_obj.save()
         
-        elif category == 'certificate' and not raw_text:
-
-            media_obj.title = "Certificate (No text found)"
-            media_obj.save()
-
         return Response(UserMediaSerializer(media_obj).data, status=201)
-
 
 class StudyPostViewSet(viewsets.ModelViewSet):
     queryset = StudyPost.objects.filter(is_active=True)
@@ -130,11 +153,9 @@ class StudyPostViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = StudyPost.objects.filter(is_active=True)
-        subject = self.request.query_params.get('subject', None)
-        if subject:
-            queryset = queryset.filter(subject__icontains=subject)
-        
-        search = self.request.query_params.get('search', None)
+        subject = self.request.query_params.get('subject')
+        if subject: queryset = queryset.filter(subject__icontains=subject)
+        search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(
                 django_models.Q(title__icontains=search) |
@@ -143,35 +164,23 @@ class StudyPostViewSet(viewsets.ModelViewSet):
             )
         return queryset.order_by('-created_at')
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+    def perform_create(self, serializer): serializer.save(user=self.request.user)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['post'])
     def join(self, request, pk=None):
         post = self.get_object()
-        user = request.user
         session = StudySession.objects.filter(post=post, is_active=True).first()
-
         if not session:
-            firestore_id = f"session_{uuid.uuid4().hex}"
             session = StudySession.objects.create(
-                post=post,
-                creator=post.user,
-                firestore_chat_id=firestore_id,
-                is_active=True,
-                ai_notes_enabled=True
+                post=post, creator=post.user, is_active=True,
+                firestore_chat_id=f"session_{uuid.uuid4().hex}", ai_notes_enabled=True
             )
             session.participants.add(post.user)
-
-        if session.participants.filter(id=user.id).exists():
-            return Response(StudySessionSerializer(session).data)
-
-        if session.participants.count() >= 5:
-            return Response({'error': 'Session full'}, status=status.HTTP_400_BAD_REQUEST)
-
-        session.participants.add(user)
+        
+        if not session.participants.filter(id=request.user.id).exists():
+            if session.participants.count() >= 5: return Response({'error': 'Full'}, status=400)
+            session.participants.add(request.user)
         return Response(StudySessionSerializer(session).data)
-
 
 class StudySessionViewSet(viewsets.ModelViewSet):
     queryset = StudySession.objects.all()
@@ -183,39 +192,58 @@ class StudySessionViewSet(viewsets.ModelViewSet):
             django_models.Q(creator=self.request.user) | 
             django_models.Q(participants=self.request.user)
         ).distinct().order_by('-started_at')
-
+    
     @action(detail=True, methods=['post'])
     def end_session(self, request, pk=None):
+        """Exposes the end_session logic to the API"""
         session = self.get_object()
-        if request.user != session.creator and not session.participants.filter(id=request.user.id).exists():
-            return Response({'error': 'Not authorized'}, status=status.HTTP_403_FORBIDDEN)
         
+        # Check if the person trying to end it is the creator
+        if session.creator != request.user:
+            return Response({"error": "Only the creator can end the session"}, status=403)
+            
         session.is_active = False
         session.ended_at = timezone.now()
         session.save()
-        return Response({'message': 'Session ended'})
-
-    @action(detail=True, methods=['get'])
-    def notes(self, request, pk=None):
-        notes = ConversationNote.objects.filter(session_id=pk)
-        serializer = ConversationNoteSerializer(notes, many=True)
-        return Response(serializer.data)
-
+        
+        return Response({
+            "status": "session ended",
+            "ended_at": session.ended_at
+        }, status=200)
     @action(detail=True, methods=['post'])
     def generate_notes(self, request, pk=None):
+            session = self.get_object()
+            messages = request.data.get('messages', [])
+            
+            if not messages:
+                return Response({'error': 'No messages provided'}, status=400)
+            
+            # 1. Start the thread
+            thread = threading.Thread(
+                target=analyze_conversation_thread, 
+                args=(session.id, messages)
+            )
+            thread.start()
+
+            # 2. IMMEDIATELY return a response so Django is happy
+            return Response({
+                'message': 'Background analysis started',
+                'status': 'processing'
+            }, status=status.HTTP_202_ACCEPTED)
+    @action(detail=True, methods=['get'])
+    def notes(self, request, pk=None):
+        """Allows fetching notes via /api/sessions/{id}/notes/"""
         session = self.get_object()
-        messages = request.data.get('messages', [])
-        if not messages:
-            return Response({'error': 'No messages'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        task = analyze_conversation_task.delay(session.id, messages)
-        return Response({'task_id': task.id}, status=status.HTTP_202_ACCEPTED)
+        notes = ConversationNote.objects.filter(session=session)
+        serializer = ConversationNoteSerializer(notes, many=True)
+        return Response(serializer.data)
+    
+        return Response({'message': 'Background analysis started'}, status=status.HTTP_202_ACCEPTED)
 
 class ConversationNoteViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ConversationNote.objects.all()
     serializer_class = ConversationNoteSerializer
     permission_classes = [IsAuthenticated]
-
     def get_queryset(self):
         return self.queryset.filter(
             django_models.Q(session__creator=self.request.user) | 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { db } from "../firebase/config";
 import {
@@ -15,6 +15,7 @@ import "./ChatRoom.css";
 const ChatRoom = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [session, setSession] = useState(null);
@@ -23,31 +24,58 @@ const ChatRoom = () => {
   const [notes, setNotes] = useState([]);
   const [showNotes, setShowNotes] = useState(false);
   const [notesError, setNotesError] = useState(null);
-  const [isSending, setIsSending] = useState(false); // FIX #2: Prevent multiple sends
-  const messagesEndRef = useRef(null); // FIX #3: Better scroll reference
-  const pollingIntervalRef = useRef(null);
+  const [isSending, setIsSending] = useState(false);
 
-  // FIX #3: Auto-scroll function
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const messagesEndRef = useRef(null);
+  const pollingTimerRef = useRef(null);
+  const notesCountRef = useRef(0); // Tracks count for polling comparison
 
-  // Fetch session data
+  const scrollToBottom = useCallback((behavior = "smooth") => {
+    if (messagesEndRef.current) {
+      // requestAnimationFrame ensures the DOM has updated before scrolling
+      window.requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior });
+      });
+    }
+  }, []);
+
+  // Sync ref with state
   useEffect(() => {
-    const fetchSession = async () => {
+    notesCountRef.current = notes.length;
+  }, [notes]);
+
+  // Initial Data Fetch
+  useEffect(() => {
+    let isMounted = true;
+
+    const initData = async () => {
       try {
-        const response = await api.get(`/sessions/${sessionId}/`);
-        setSession(response.data);
+        const [sessionRes, notesRes] = await Promise.all([
+          api.get(`/sessions/${sessionId}/`),
+          api.get(`/sessions/${sessionId}/notes/`),
+        ]);
+
+        if (isMounted) {
+          setSession(sessionRes.data);
+          const initialNotes = Array.isArray(notesRes.data)
+            ? notesRes.data
+            : notesRes.data.results || [];
+          setNotes(initialNotes);
+        }
       } catch (err) {
-        console.error("Error fetching session:", err);
+        // Silent fail for non-critical session fetch
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
-    fetchSession();
+
+    initData();
+    return () => {
+      isMounted = false;
+    };
   }, [sessionId]);
 
-  // Listen to live messages from Firebase
+  // Firestore Real-time Listener
   useEffect(() => {
     if (!session?.firestore_chat_id) return;
 
@@ -59,38 +87,24 @@ const ChatRoom = () => {
     );
     const q = query(messagesRef, orderBy("timestamp", "asc"));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setMessages(docs);
-      // FIX #3: Scroll to bottom whenever messages update
-      setTimeout(scrollToBottom, 100);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const docs = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        setMessages(docs);
+        scrollToBottom();
+      },
+      (err) => {
+        // Handle snapshot error silently
+      },
+    );
 
     return () => unsubscribe();
-  }, [session?.firestore_chat_id]);
-
-  // FIX #3: Scroll on initial mount and when messages change
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  // Fetch existing notes on load
-  useEffect(() => {
-    if (!sessionId) return;
-    fetchNotes();
-  }, [sessionId]);
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-    };
-  }, []);
+  }, [session?.firestore_chat_id, scrollToBottom]);
 
   const fetchNotes = async () => {
     try {
@@ -98,62 +112,66 @@ const ChatRoom = () => {
       const notesData = Array.isArray(response.data)
         ? response.data
         : response.data.results || [];
+
       setNotes(notesData);
       setNotesError(null);
       return notesData;
     } catch (err) {
-      console.error("Error fetching notes:", err);
       setNotesError("Failed to load notes");
       return [];
     }
   };
 
-  const startPollingNotes = () => {
+  // Production-grade Polling (Prevents request stacking)
+  const startPollingNotes = useCallback(() => {
+    if (pollingTimerRef.current) clearTimeout(pollingTimerRef.current);
+
     let pollCount = 0;
-    const maxPolls = 30;
+    const maxPolls = 20; // 40 seconds total
 
-    pollingIntervalRef.current = setInterval(async () => {
+    const poll = async () => {
       pollCount++;
-      const fetchedNotes = await fetchNotes();
+      const currentNotes = await fetchNotes();
 
-      if (fetchedNotes.length > notes.length) {
-        clearInterval(pollingIntervalRef.current);
+      if (currentNotes.length > notesCountRef.current) {
         setIsGenerating(false);
         setShowNotes(true);
-        alert("AI notes generated successfully!");
+        clearTimeout(pollingTimerRef.current);
+        return;
       }
 
       if (pollCount >= maxPolls) {
-        clearInterval(pollingIntervalRef.current);
         setIsGenerating(false);
-        alert(
-          "Note generation is taking longer than expected. Please refresh.",
-        );
+        setNotesError("Generation timed out. Check back in a moment.");
+        return;
       }
-    }, 2000); // Changed to 2 seconds for better UX
-  };
+
+      pollingTimerRef.current = setTimeout(poll, 2000);
+    };
+
+    poll();
+  }, [sessionId]);
+
+  // Clean up timers on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingTimerRef.current) clearTimeout(pollingTimerRef.current);
+    };
+  }, []);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
+    const messageContent = newMessage.trim();
 
-    // FIX #2: Prevent multiple sends and validate message
-    if (isSending || !newMessage.trim() || !session?.firestore_chat_id) {
-      return;
-    }
+    if (isSending || !messageContent || !session?.firestore_chat_id) return;
 
-    const userJson = localStorage.getItem("user");
-    const storedUser = userJson ? JSON.parse(userJson) : null;
-    const senderId = storedUser?.id || "guest-id";
-    const senderName = storedUser?.username || "Anonymous";
-
-    // FIX #2: Set sending state immediately
     setIsSending(true);
-    const messageToSend = newMessage.trim();
-
-    // FIX #2: Clear input IMMEDIATELY before sending
-    setNewMessage("");
+    setNewMessage(""); // Optimistic UI: clear immediately
 
     try {
+      const userJson = localStorage.getItem("user");
+      const storedUser = userJson ? JSON.parse(userJson) : null;
+
       const messagesRef = collection(
         db,
         "studySessions",
@@ -162,27 +180,22 @@ const ChatRoom = () => {
       );
 
       await addDoc(messagesRef, {
-        text: messageToSend,
-        senderId: senderId,
-        senderName: senderName,
+        text: messageContent,
+        senderId: storedUser?.id || "guest",
+        senderName: storedUser?.username || "Anonymous",
         timestamp: serverTimestamp(),
       });
     } catch (err) {
-      console.error("Error sending message:", err);
-      // FIX #2: Restore message if send fails
-      setNewMessage(messageToSend);
-      alert("Failed to send message. Please try again.");
+      setNewMessage(messageContent); // Revert on failure
+      setNotesError("Message failed to send.");
     } finally {
-      // FIX #2: Re-enable sending
       setIsSending(false);
+      scrollToBottom();
     }
   };
 
   const handleGenerateNotes = async () => {
-    if (messages.length === 0) {
-      alert("No messages to analyze yet! Start chatting first.");
-      return;
-    }
+    if (messages.length === 0 || isGenerating) return;
 
     setIsGenerating(true);
     setNotesError(null);
@@ -197,65 +210,44 @@ const ChatRoom = () => {
 
       const response = await api.post(
         `/sessions/${sessionId}/generate_notes/`,
-        { messages: messagesData },
+        {
+          messages: messagesData,
+        },
       );
 
       if (response.status === 202) {
-        alert("AI is processing your conversation. Notes will appear shortly!");
         startPollingNotes();
-      } else if (response.status === 200 || response.status === 201) {
+      } else {
         await fetchNotes();
         setIsGenerating(false);
         setShowNotes(true);
-        alert("AI notes generated successfully!");
       }
     } catch (err) {
-      console.error("Error generating notes:", err);
-
-      let errorMessage = "Failed to generate notes. ";
-      if (err.response?.status === 404) {
-        errorMessage += "Endpoint not found.";
-      } else if (err.response?.status === 500) {
-        errorMessage += "Server error.";
-      } else if (err.response?.data?.detail) {
-        errorMessage += err.response.data.detail;
-      } else if (err.response?.data?.error) {
-        errorMessage += err.response.data.error;
-      }
-
-      setNotesError(errorMessage);
-      alert(errorMessage);
+      setNotesError(
+        err.response?.data?.error || "AI Service temporarily unavailable.",
+      );
       setIsGenerating(false);
-
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
     }
   };
 
   const handleEndSession = async () => {
-    if (!window.confirm("End session and return to dashboard?")) return;
+    if (!window.confirm("Are you sure you want to end this session?")) return;
 
     try {
       await api.post(`/sessions/${sessionId}/end_session/`);
       navigate("/dashboard");
     } catch (err) {
-      console.error("Error ending session:", err);
-      alert("Failed to end session.");
+      setNotesError("Could not end session. Please try again.");
     }
   };
 
-  // FIX #1: Toggle notes panel
-  const toggleNotesPanel = () => {
-    setShowNotes(!showNotes);
-  };
+  const toggleNotesPanel = () => setShowNotes((prev) => !prev);
 
   if (loading) return <div className="loading">Loading session...</div>;
   if (!session) return <div className="error">Session not found</div>;
 
   return (
     <div className={`chat-container ${showNotes ? "notes-open" : ""}`}>
-      {/* Header */}
       <header className="chat-header">
         <div className="session-info">
           <h2>{session.post?.title || session.topic || "Study Session"}</h2>
@@ -281,7 +273,6 @@ const ChatRoom = () => {
         </div>
       </header>
 
-      {/* Error Alert */}
       {notesError && (
         <div className="error-alert">
           {notesError}
@@ -291,9 +282,7 @@ const ChatRoom = () => {
         </div>
       )}
 
-      {/* Main Content Area */}
       <div className="chat-main-content">
-        {/* Messages Area */}
         <main className="messages-log">
           {messages.length === 0 ? (
             <div className="messages-empty">
@@ -307,20 +296,18 @@ const ChatRoom = () => {
                   <span className="sender-name">{msg.senderName}</span>
                   <p className="message-text">{msg.text}</p>
                   <span className="message-time">
-                    {msg.timestamp?.toDate?.().toLocaleTimeString([], {
+                    {msg.timestamp?.toDate?.()?.toLocaleTimeString([], {
                       hour: "2-digit",
                       minute: "2-digit",
-                    })}
+                    }) || "Sending..."}
                   </span>
                 </div>
               </div>
             ))
           )}
-          {/* FIX #3: Scroll anchor at the end of messages */}
-          <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} style={{ height: "1px" }} />
         </main>
 
-        {/* Message Input */}
         <form className="message-form" onSubmit={handleSendMessage}>
           <input
             value={newMessage}
@@ -330,12 +317,11 @@ const ChatRoom = () => {
             autoFocus
           />
           <button type="submit" disabled={!newMessage.trim() || isSending}>
-            {isSending ? "Sending..." : "Send"}
+            {isSending ? "..." : "Send"}
           </button>
         </form>
       </div>
 
-      {/* FIX #1: Notes Side Panel with proper open/close functionality */}
       <aside className={`notes-panel ${showNotes ? "active" : ""}`}>
         <div className="notes-panel-header">
           <h3>📚 Study Notes</h3>
@@ -343,16 +329,11 @@ const ChatRoom = () => {
             <button
               onClick={fetchNotes}
               className="notes-refresh-btn"
-              title="Refresh notes"
               disabled={isGenerating}
             >
               🔄
             </button>
-            <button
-              onClick={toggleNotesPanel}
-              className="notes-close-btn"
-              title="Close panel"
-            >
+            <button onClick={toggleNotesPanel} className="notes-close-btn">
               ✕
             </button>
           </div>
@@ -362,13 +343,10 @@ const ChatRoom = () => {
           {notes.length === 0 ? (
             <div className="notes-empty">
               <div className="notes-empty-icon">📝</div>
-              <p>
-                No notes yet. Click "Generate Notes" to create study notes from
-                your conversation.
-              </p>
+              <p>Click "Generate Notes" to summarize this chat.</p>
             </div>
           ) : (
-            notes.map((note, index) => (
+            [...notes].reverse().map((note, index) => (
               <article key={note.id || index} className="note-card">
                 <div className="note-timestamp">
                   {new Date(note.created_at).toLocaleString()}
@@ -383,26 +361,26 @@ const ChatRoom = () => {
                   </section>
                 )}
 
-                {note.key_concepts && note.key_concepts.length > 0 && (
+                {note.key_concepts?.length > 0 && (
                   <section className="note-section">
                     <h4 className="note-section-title">💡 Key Concepts</h4>
                     <div className="note-section-content">
                       <ul>
-                        {note.key_concepts.map((concept, idx) => (
-                          <li key={idx}>{concept}</li>
+                        {note.key_concepts.map((c, i) => (
+                          <li key={i}>{c}</li>
                         ))}
                       </ul>
                     </div>
                   </section>
                 )}
 
-                {note.definitions && note.definitions.length > 0 && (
+                {note.definitions?.length > 0 && (
                   <section className="note-section">
                     <h4 className="note-section-title">📖 Definitions</h4>
                     <div className="note-section-content">
                       <ul>
-                        {note.definitions.map((def, idx) => (
-                          <li key={idx}>
+                        {note.definitions.map((def, i) => (
+                          <li key={i}>
                             <strong className="note-definition-term">
                               {def.term || def}:
                             </strong>{" "}
@@ -414,32 +392,18 @@ const ChatRoom = () => {
                   </section>
                 )}
 
-                {note.study_tips && note.study_tips.length > 0 && (
+                {note.study_tips?.length > 0 && (
                   <section className="note-section">
                     <h4 className="note-section-title">✨ Study Tips</h4>
                     <div className="note-section-content">
                       <ul>
-                        {note.study_tips.map((tip, idx) => (
-                          <li key={idx}>{tip}</li>
+                        {note.study_tips.map((t, i) => (
+                          <li key={i}>{t}</li>
                         ))}
                       </ul>
                     </div>
                   </section>
                 )}
-
-                {note.resources_mentioned &&
-                  note.resources_mentioned.length > 0 && (
-                    <section className="note-section">
-                      <h4 className="note-section-title">🔗 Resources</h4>
-                      <div className="note-section-content">
-                        <ul>
-                          {note.resources_mentioned.map((resource, idx) => (
-                            <li key={idx}>{resource}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    </section>
-                  )}
               </article>
             ))
           )}

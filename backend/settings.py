@@ -173,22 +173,22 @@ CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 # print(f"DEBUG: Celery Broker is pointing to: {CELERY_BROKER_URL}")
 
 # 2. MANDATORY SSL Settings for Upstash (Fixes "Connection closed by server")
-CELERY_BROKER_USE_SSL = {
-    'ssl_cert_reqs': 'none'
-}
-CELERY_REDIS_BACKEND_USE_SSL = {
-    'ssl_cert_reqs': 'none'
-}
+# CELERY_BROKER_USE_SSL = {
+#     'ssl_cert_reqs': 'none'
+# }
+# CELERY_REDIS_BACKEND_USE_SSL = {
+#     'ssl_cert_reqs': 'none'
+# }
 
-# 3. Security & Format Settings
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'UTC'
+# # 3. Security & Format Settings
+# CELERY_ACCEPT_CONTENT = ['json']
+# CELERY_TASK_SERIALIZER = 'json'
+# CELERY_RESULT_SERIALIZER = 'json'
+# CELERY_TIMEZONE = 'UTC'
 
-# 4. Connection Stability (Optional but recommended for Cloud Redis)
-CELERY_REDIS_BROKER_HEALTH_CHECK_INTERVAL = 30
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+# # 4. Connection Stability (Optional but recommended for Cloud Redis)
+# CELERY_REDIS_BROKER_HEALTH_CHECK_INTERVAL = 30
+# CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
 # Channels (WebSocket) Configuration
 CHANNEL_LAYERS = {

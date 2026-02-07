@@ -1,28 +1,24 @@
-// frontend/src/components/Login.jsx
+// src/components/Login.jsx
 import React, { useEffect, useState } from "react";
 import { authAPI } from "../services/api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
+import { LogIn, User, Lock, Sparkles } from "lucide-react";
+import { useAuth } from "../context/AuthContext.jsx"; // Import the hook
 import "./login.css";
 
-const Login = ({ onLoginSuccess }) => {
-  const [formData, setFormData] = useState({
-    username: "",
-    password: "",
-  });
+const Login = () => {
+  const { login, isLoggedIn } = useAuth();
+  const [formData, setFormData] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
   const navigate = useNavigate();
 
-  // 🔒 Auto-login if already authenticated
+  // Redirect if already logged in
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    const isLoggedIn = localStorage.getItem("is_logged_in");
-
-    if (token && isLoggedIn === "true") {
+    if (isLoggedIn) {
       navigate("/");
     }
-  }, [navigate]);
+  }, [isLoggedIn, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,33 +27,22 @@ const Login = ({ onLoginSuccess }) => {
 
     try {
       const data = await authAPI.login(formData);
-
-      const token = data?.access || data?.data?.access || data?.token;
+      const token = data?.access || data?.token;
 
       const user = {
-        id: data?.id || data?.user?.id || data?.user_id,
-        username: data?.username || data?.user?.username || formData.username,
+        id: data?.id || data?.user?.id,
+        username: data?.username || formData.username,
       };
 
-      if (!token) {
-        throw new Error("No access token received");
-      }
+      if (!token) throw new Error("Authentication failed");
 
-      // ✅ Persist EVERYTHING needed
-      localStorage.setItem("access_token", token);
-      localStorage.setItem("user", JSON.stringify(user));
-      localStorage.setItem("is_logged_in", "true");
-
-      if (onLoginSuccess) {
-        onLoginSuccess();
-      }
+      // Use context to login (Handles localStorage and state sync)
+      login(user, token);
 
       navigate("/");
     } catch (err) {
-      console.error("Login error:", err);
       setError(
-        err.response?.data?.detail ||
-          "Login failed. Please check your credentials.",
+        err.response?.data?.detail || "Invalid credentials. Please try again.",
       );
     } finally {
       setLoading(false);
@@ -65,45 +50,93 @@ const Login = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="login-container">
-      <div>
-        <h2>Login to Study Mitra</h2>
+    <div className="login-page">
+      <div className="login-card">
+        {/* Left Side: Visual Branding */}
+        <div className="login-visual">
+          <div className="visual-content">
+            <div className="brand-badge">
+              <Sparkles size={16} /> <span>AI-Powered Learning</span>
+            </div>
+            <h1>
+              Your Ultimate <br />
+              <span>Study Mitra</span>
+            </h1>
+            <p>
+              Join thousands of students mastering subjects with OCR-powered
+              notes and AI insights.
+            </p>
+          </div>
+          <div className="visual-footer">
+            <div className="mini-stat">
+              <strong>10k+</strong> <span>Users</span>
+            </div>
+            <div className="mini-stat">
+              <strong>50k+</strong> <span>Tasks Solved</span>
+            </div>
+          </div>
+        </div>
 
-        {error && <p>{error}</p>}
+        {/* Right Side: Form */}
+        <div className="login-form-section">
+          <div className="form-header">
+            <div className="mobile-logo">Study Mitra</div>
+            <h2>Welcome Back</h2>
+            <p>Please enter your details to continue</p>
+          </div>
 
-        <form onSubmit={handleSubmit}>
-          <input
-            type="text"
-            placeholder="Username"
-            value={formData.username}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                username: e.target.value,
-              })
-            }
-            required
-            disabled={loading}
-          />
+          {error && <div className="error-toast">{error}</div>}
 
-          <input
-            type="password"
-            placeholder="Password"
-            value={formData.password}
-            onChange={(e) =>
-              setFormData({
-                ...formData,
-                password: e.target.value,
-              })
-            }
-            required
-            disabled={loading}
-          />
+          <form onSubmit={handleSubmit}>
+            <div className="input-group">
+              <label>Username</label>
+              <div className="input-wrapper">
+                <User className="input-icon" size={18} />
+                <input
+                  type="text"
+                  placeholder="Enter your username"
+                  value={formData.username}
+                  onChange={(e) =>
+                    setFormData({ ...formData, username: e.target.value })
+                  }
+                  required
+                  disabled={loading}
+                />
+              </div>
+            </div>
 
-          <button type="submit" disabled={loading}>
-            {loading ? "Logging in..." : "Login"}
-          </button>
-        </form>
+            <div className="input-group">
+              <label>Password</label>
+              <div className="input-wrapper">
+                <Lock className="input-icon" size={18} />
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                  required
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            <button type="submit" className="login-btn" disabled={loading}>
+              {loading ? (
+                <span className="loader"></span>
+              ) : (
+                <>
+                  Log In <LogIn size={18} />
+                </>
+              )}
+            </button>
+          </form>
+
+          <p className="auth-footer">
+            Don't have an account? <Link to="/signup">Sign up for free</Link>
+          </p>
+        </div>
       </div>
     </div>
   );
