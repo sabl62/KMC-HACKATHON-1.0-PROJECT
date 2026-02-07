@@ -1,0 +1,161 @@
+/* ===============================
+   GLOBAL VARIABLES
+================================ */
+:root {
+    --bg-primary: #0b0f1a;
+    --bg-secondary: #11162a;
+    --card-bg: rgba(255, 255, 255, 0.04);
+    --border-soft: rgba(255, 255, 255, 0.08);
+
+    --text-primary: #ffffff;
+    --text-secondary: #b6b9d6;
+
+    --accent: #8b5cf6;
+    --accent-glow: rgba(139, 92, 246, 0.45);
+    --danger: #ff5c5c;
+
+    --radius-lg: 18px;
+    --radius-md: 12px;
+
+    --transition: all 0.3s ease;
+}
+
+/* ===============================
+   PAGE BACKGROUND
+================================ */
+.login-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        radial-gradient(circle at top right, #2b1a52, transparent 45%),
+        radial-gradient(circle at bottom left, #1b2a5a, transparent 45%),
+        var(--bg-primary);
+    font-family: "Inter", system-ui, sans-serif;
+    padding: 1.5rem;
+    color: var(--text-primary);
+}
+
+/* ===============================
+   LOGIN CARD
+================================ */
+.login-container>div {
+    width: 100%;
+    max-width: 420px;
+    background: linear-gradient(180deg,
+            rgba(255, 255, 255, 0.06),
+            rgba(255, 255, 255, 0.02));
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    padding: 2.2rem;
+    backdrop-filter: blur(18px);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.02),
+        0 30px 80px rgba(0, 0, 0, 0.6);
+    animation: fadeUp 0.6s ease;
+}
+
+@keyframes fadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(18px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===============================
+   TITLE
+================================ */
+.login-container h2 {
+    margin-bottom: 1.6rem;
+    text-align: center;
+    font-size: 1.7rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* ===============================
+   ERROR
+================================ */
+.login-container p {
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--danger);
+    margin-bottom: 1rem;
+}
+
+/* ===============================
+   FORM
+================================ */
+.login-container form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+}
+
+/* ===============================
+   INPUTS
+================================ */
+.login-container input {
+    width: 100%;
+    padding: 0.9rem 1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-soft);
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    outline: none;
+    transition: var(--transition);
+}
+
+.login-container input::placeholder {
+    color: var(--text-secondary);
+}
+
+.login-container input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* ===============================
+   BUTTON
+================================ */
+.login-container button {
+    margin-top: 0.6rem;
+    padding: 0.9rem;
+    border-radius: var(--radius-md);
+    border: none;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: linear-gradient(135deg,
+            #8b5cf6,
+            #6d28d9);
+    color: #fff;
+    transition: var(--transition);
+    box-shadow: 0 12px 35px rgba(139, 92, 246, 0.35);
+}
+
+.login-container button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 18px 45px rgba(139, 92, 246, 0.55);
+}
+
+.login-container button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+/* ===============================
+   RESPONSIVE
+================================ */
+@media (max-width: 480px) {
+    .login-container>div {
+        padding: 1.7rem;
+    }
+}

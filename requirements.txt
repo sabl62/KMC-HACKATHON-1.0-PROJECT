@@ -1,0 +1,25 @@
+# AI & OCR Integration
+google-cloud-vision==3.4.5    # For the advanced OCR text extraction
+groq==1.3.0                   # If using GPT for Bio/Skill analysis
+python-multipart==0.0.6       # For handling file uploads
+
+# Image/Media Management
+cloudinary==1.36.0            # Backend SDK to sync with your Cloudinary setup
+
+# Environment & Utilities
+python-dotenv==1.0.0
+pydantic==2.5.2
+requests==2.31.0
+```// filepath: d:\Study Mitra\requirements.txt
+# AI & OCR Integration
+google-cloud-vision==3.4.5    # For the advanced OCR text extraction
+groq==1.3.0                   # If using GPT for Bio/Skill analysis
+python-multipart==0.0.6       # For handling file uploads
+
+# Image/Media Management
+cloudinary==1.36.0            # Backend SDK to sync with your Cloudinary setup
+
+# Environment & Utilities
+python-dotenv==1.0.0
+pydantic==2.5.2
+requests==2.31.0
