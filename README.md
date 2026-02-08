@@ -73,7 +73,7 @@ STUDY MITRA
 Activate your environment and initialize the Django server:
 
 ```bash
-# Activation (Windows)
+# Activation 
 cd backend-main
 venv\Scripts\activate 
 
