@@ -74,6 +74,7 @@ Activate your environment and initialize the Django server:
 
 ```bash
 # Activation (Windows)
+cd backend-main
 venv\Scripts\activate 
 
 # Install required packages
