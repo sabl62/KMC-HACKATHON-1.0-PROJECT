@@ -126,6 +126,8 @@ export const profileAPI = {
     getMe: () => api.get('/userprofile/me/'),
     update: (data) => api.patch('/userprofile/me/', data), // ← Change this line
     uploadMedia: (data) => api.post('/userprofile/upload_media/', data),
+    getProfile: (username) => api.get(`/userprofile/${username}/`),
 };
+
 
 export default api;

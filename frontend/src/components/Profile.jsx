@@ -153,16 +153,12 @@ const Profile = ({ username, isOwnProfile = true }) => {
       uploadInfo.ocr?.adv_ocr?.data?.[0]?.fullTextAnnotation?.text ||
       "";
 
-    console.log(
-      "🎯 SUCCESS! OCR Text found:",
-      extractedText.substring(0, 50) + "...",
-    );
 
     try {
       await profileAPI.uploadMedia({
         fileUrl: uploadInfo.secure_url,
         category: category,
-        isPublic: notePrivacy === "public",
+        is_public: notePrivacy === "public",
         aiAnalysisText:
           extractedText || `Document: ${uploadInfo.original_filename}`,
       });
@@ -249,7 +245,7 @@ const Profile = ({ username, isOwnProfile = true }) => {
               <h1 className="profile-name">{displayUsername}</h1>
               <p className="profile-status">
                 <span className="status-dot"></span>
-                Verified Student @ Study Mitra
+                {isOwnProfile ? "Active Student" : "Student"}
               </p>
             </div>
           </div>
@@ -379,11 +375,26 @@ const Profile = ({ username, isOwnProfile = true }) => {
                   <span className="sparkle">✨</span>
                   <div className="ai-status-text">
                     <h3 className="ai-title">AI Portfolio Builder</h3>
-                    <p className="skills-summary">
-                      {allSkills.length > 0
-                        ? `${allSkills.length} Skills: ${allSkills.slice(0, 5).join(", ")}${allSkills.length > 5 ? "..." : ""}`
-                        : "Upload certificates to build your skill portfolio"}
-                    </p>
+                    <div className="skills-summary-container">
+                      {allSkills.length > 0 ? (
+                        <>
+                          <span className="skills-count-badge">
+                            {allSkills.length} Skills Identified
+                          </span>
+                          <div className="skills-flex-wrapper">
+                            {allSkills.map((skill, index) => (
+                              <span key={index} className="skill-tag">
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="empty-skills-text">
+                          Upload certificates to build your skill portfolio
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 

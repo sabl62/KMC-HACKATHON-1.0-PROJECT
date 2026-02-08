@@ -25,16 +25,26 @@ class UserMediaSerializer(serializers.ModelSerializer):
 
 class UserProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
-    portfolio_media = UserMediaSerializer(
-        source='user.portfolio_media', 
-        many=True, 
-        read_only=True
-    )
+    # 1. Change to SerializerMethodField
+    portfolio_media = serializers.SerializerMethodField()
     
     class Meta:
         model = UserProfile
         fields = ['id', 'user', 'bio', 'profile_picture', 'study_interests', 'created_at', 'portfolio_media']
 
+    # 2. Add the privacy filter logic
+    def get_portfolio_media(self, obj):
+        request = self.context.get('request')
+        # Start with all media for this profile's user
+        queryset = UserMedia.objects.filter(user=obj.user)
+
+        # PRIVACY GATEKEEPER:
+        # If the requester is NOT the owner of this profile
+        if request and request.user != obj.user:
+            # ONLY return notes marked as public
+            queryset = queryset.filter(is_public=True)
+            
+        return UserMediaSerializer(queryset, many=True).data
 class StudyPostSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     active_sessions_count = serializers.SerializerMethodField()

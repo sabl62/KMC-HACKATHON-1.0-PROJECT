@@ -11,6 +11,7 @@ from .views import (
     StudySessionViewSet,
     ConversationNoteViewSet,
     UserProfileViewSet,
+    ExamPrepView,
 )
 
 router = DefaultRouter()
@@ -24,6 +25,7 @@ urlpatterns = [
     path('auth/register/', RegisterView.as_view(), name='register'),
     path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-
+    path('exam-prep/', ExamPrepView.as_view(), name='exam-prep-base'),
+    path('exam-prep/solve/', ExamPrepView.as_view(http_method_names=['post']), name='exam-solve'),
     path('', include(router.urls)),
 ]

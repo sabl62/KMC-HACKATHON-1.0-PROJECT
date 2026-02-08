@@ -99,11 +99,19 @@ class RegisterView(APIView):
 class UserProfileViewSet(viewsets.ModelViewSet):
     queryset = UserProfile.objects.all()
     serializer_class = UserProfileSerializer
+    # 1. Allow looking up by username (matches your profileAPI.getProfile(username))
+    lookup_field = 'user__username' 
+    
+    # 2. Allow any logged in user to VIEW profiles, but keep restrictions on editing
     permission_classes = [IsAuthenticated]
-    def get_queryset(self): return self.queryset.filter(user=self.request.user)
+
+    def get_queryset(self):
+        # Allow viewing ALL profiles so you can see others
+        return UserProfile.objects.all()
 
     @action(detail=False, methods=['get', 'post'])
     def me(self, request):
+        # This keeps your existing /me logic for the logged-in user
         profile, _ = UserProfile.objects.get_or_create(user=request.user)
         if request.method == 'POST':
             serializer = self.get_serializer(profile, data=request.data, partial=True)
@@ -112,17 +120,16 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(profile).data)
-
     @action(detail=False, methods=['post'])
     def upload_media(self, request):
         file_url = request.data.get('fileUrl') or request.data.get('file_url')
         category = request.data.get('category')
         raw_text = request.data.get('aiAnalysisText', '').strip()
-
+        is_public = request.data.get('is_public', True)
         if not file_url: return Response({"error": "No URL provided"}, status=400)
 
         media_obj = UserMedia.objects.create(
-            user=request.user, file_url=file_url, category=category,
+            user=request.user, file_url=file_url, category=category, is_public=is_public,
             title="Processing..." if category == 'certificate' else "New Note"
         )
 
@@ -249,3 +256,78 @@ class ConversationNoteViewSet(viewsets.ReadOnlyModelViewSet):
             django_models.Q(session__creator=self.request.user) | 
             django_models.Q(session__participants=self.request.user)
         ).distinct().order_by('-created_at')
+class ExamPrepView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Routes the POST request based on the URL path.
+        Matches: /api/exam-prep/ AND /api/exam-prep/solve/
+        """
+        path = request.path.rstrip('/') # Clean trailing slashes
+        
+        if path.endswith('solve'):
+            return self._solve_question(request)
+        
+        return self._generate_materials(request)
+
+    def _generate_materials(self, request):
+        """Internal method to generate study materials"""
+        data = request.data
+        subject = data.get('subject')
+        topic = data.get('topic')
+        grade = data.get('gradeLevel')
+        difficulty = data.get('difficulty', 'Intermediate')
+
+        if not all([subject, topic, grade]):
+            return Response({"error": "Missing required fields: subject, topic, and gradeLevel"}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        prompt = f"""
+        Act as an expert tutor. Create a study guide for a {grade} student on {subject}: {topic}.
+        Difficulty level: {difficulty}.
+        
+        Return ONLY a JSON object with:
+        1. keyConcepts: (list of strings)
+        2. questions: (list of objects with 'id' and 'text')
+        """
+
+        try:
+            completion = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": "You are a teacher who only responds in JSON format."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.7
+            )
+            
+            analysis = json.loads(completion.choices[0].message.content)
+            return Response(analysis, status=200)
+
+        except Exception as e:
+            return Response({"error": f"Groq Generation Error: {str(e)}"}, 
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _solve_question(self, request):
+        """Internal method to solve a specific question"""
+        question_text = request.data.get('question')
+        
+        if not question_text:
+            return Response({"error": "No question provided"}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            completion = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": "You are an expert tutor. Solve the following exam question clearly, accurately, and step-by-step."},
+                    {"role": "user", "content": f"Please solve this question: {question_text}"}
+                ],
+                temperature=0.3 # Lower temperature for more factual/precise solving
+            )
+            return Response({"answer": completion.choices[0].message.content}, status=200)
+        except Exception as e:
+            return Response({"error": f"Groq Solver Error: {str(e)}"}, 
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)

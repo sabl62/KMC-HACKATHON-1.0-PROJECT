@@ -1004,6 +1004,48 @@ body {
     font-weight: 500;
 }
 
+/* Container for the whole skills section */
+.skills-summary-container {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.skills-count-badge {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #6366f1;
+    /* Indigo color to match the "sparkle" theme */
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* The magic part: flex-wrap allows items to move to the next line */
+.skills-flex-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-width: 100%;
+}
+
+/* Individual skill pill */
+.skill-tag {
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    color: #4f46e5;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    /* Prevents a single word from breaking */
+    transition: all 0.2s ease;
+}
+
+.skill-tag:hover {
+    background: rgba(99, 102, 241, 0.2);
+    transform: translateY(-1px);
+}
 /* ============================================
    ANIMATIONS
    ============================================ */
