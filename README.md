@@ -97,13 +97,7 @@ npm run dev
 Ensure your `.env` in the root directory is populated:
 
 ```
-# AI & Media Services
-VITE_CLOUDINARY_CLOUD_NAME=your_cloud_name
-VITE_CLOUDINARY_UPLOAD_PRESET=your_preset
-
-# Backend Security
-SECRET_KEY=your_django_secret_key
-DEBUG=True
+Check the .env.example file, create the files in mentioned directories and add your variables.
 ```
 
 ---
