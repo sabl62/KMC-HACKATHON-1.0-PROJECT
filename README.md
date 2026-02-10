@@ -12,8 +12,8 @@ This repository follows a modular full-stack architecture as seen in the project
 
 ```
 STUDY MITRA
-├── api/             # API Documentation & OpenAPI Specs
-├── backend/         # Django REST Framework Core Logic
+├── backend-main/api/             # API Core logic & groq Specs
+├── backend-main/ backend/        # Django configurations for   the api
 ├── frontend/        # React (Vite) + Glassmorphism UI
 ├── .env             # Global Environment Configurations
 ├── .gitignore       # Git exclusion rules
@@ -63,8 +63,7 @@ STUDY MITRA
 **External APIs**
 - Groq (used for AI services)
 - Cloudinary API (used for uploading/handling images)
-- Upstash Redis (cloud database for the easiest management of AI data)
-- A Quiz API (for micro-challenges, left to set up)
+
 
 ---
 ## **🚦 Getting Started**
@@ -121,3 +120,5 @@ DEBUG=True
 Developed for KMC Hackathon 2026. Built with passion to empower the next generation of scholars.
 
 **COPYRIGHTED BY TEAM BEYOND-BITS**
+
+
