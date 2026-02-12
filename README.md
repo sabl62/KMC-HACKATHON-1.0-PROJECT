@@ -1,4 +1,4 @@
-# ✨ Study Mitra - BY TEAM BEYOND-BITS - https://studymitraa.netlify.app/
+# ✨ Study Mitra - BY TEAM BEYOND-BITS - https://studymitraa.netlify.app/ OR https://study-mitra.netlify.app/
 
 > **Unlock Your Potential: A Smart Academic Portfolio, Communication, Learning & Note Management System.**
 
