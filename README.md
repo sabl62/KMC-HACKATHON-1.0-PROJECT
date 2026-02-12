@@ -68,7 +68,14 @@ STUDY MITRA
 ---
 ## **🚦 Getting Started**
 
-### 1. Backend Setup
+### 1. Environment Config
+Ensure your `.env` in the root directory is populated:
+
+```
+Check the .env.example file, create the files in mentioned directories and add your variables.
+```
+
+### 2. Backend Setup
 Activate your environment and initialize the Django server:
 
 ```bash
@@ -84,20 +91,13 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-### 2. Frontend Setup
+### 3. Frontend Setup
 Navigate to the frontend directory and launch the development environment:
 
 ```bash
 cd frontend
 npm install
 npm run dev
-```
-
-### 3. Environment Config
-Ensure your `.env` in the root directory is populated:
-
-```
-Check the .env.example file, create the files in mentioned directories and add your variables.
 ```
 
 ---
